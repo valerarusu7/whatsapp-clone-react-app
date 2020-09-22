@@ -1,37 +1,71 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Avatar, IconButton } from "@material-ui/core";
-import {
-  AttachFile,
-  InsertEmoticon,
-  Mic,
-  MoreVert,
-  SearchOutlined,
-} from "@material-ui/icons";
+import { AttachFile, MoreVert, SearchOutlined } from "@material-ui/icons";
 import React from "react";
 import "./Chat.css";
+import { useParams } from "react-router-dom";
+import db from "../../firebase";
+import { useStateProviderValue } from "../../StateProvider";
+import firebase from "firebase";
+import InsertEmoticonIcon from "@material-ui/icons/InsertEmoticon";
+import MicIcon from "@material-ui/icons/Mic";
 
 function Chat() {
   const [input, setInput] = useState("");
-  const sendMessage = (e) => {
-      e.preventDefault();
-      setInput("");
-  };
+  const { roomId } = useParams();
+  const [roomName, setRoomName] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [{ user }] = useStateProviderValue();
 
+  useEffect(() => {
+    if (roomId) {
+      db.collection("rooms")
+        .doc(roomId)
+        .onSnapshot((snapshot) => setRoomName(snapshot.data().name));
+
+      db.collection("rooms")
+        .doc(roomId)
+        .collection("messages")
+        .orderBy("timestamp", "asc")
+        .onSnapshot((snapshot) =>
+          setMessages(snapshot.docs.map((doc) => doc.data()))
+        );
+    }
+  }, [roomId]);
+
+  const sendMessage = (e) => {
+    e.preventDefault();
+    db.collection("rooms").doc(roomId).collection("messages").add({
+      name: user.displayName,
+      message: input,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+
+    setInput("");
+  };
   return (
     <div className="chat">
       <div className="chat__header">
         <Avatar src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" />
         <div className="chat__headerInfo">
-          <h3>Room name</h3>
-          <p>Last seen at ...</p>
+          <h3>{roomName}</h3>
+          <p>
+            last seen{" "}
+            {new Date(
+              messages[messages.length - 1]?.timestamp?.toDate()
+            ).toUTCString()}
+          </p>
         </div>
+
         <div className="chat__headerRight">
           <IconButton>
             <SearchOutlined />
           </IconButton>
+
           <IconButton>
             <AttachFile />
           </IconButton>
+
           <IconButton>
             <MoreVert />
           </IconButton>
@@ -39,31 +73,35 @@ function Chat() {
       </div>
 
       <div className="chat__body">
-        <p className={`chat__message ${true && "chat__receiver"}`}>
-          <span className="chat__name">Valeriu Rusu</span>
-          Hey Guys
-          <span className="chat__timestamp">3:12</span>
-        </p>
+        {messages.map((message, index) => (
+          <p
+            key={index}
+            className={`chat__message ${
+              message.name === user.displayName && "chat__reciever"
+            }`}
+          >
+            <span className="chat__name">{message.name}</span>
+            {message.message}
+            <span className="chat__timestamp">
+              {new Date(message.timestamp?.toDate()).toUTCString()}
+            </span>
+          </p>
+        ))}
       </div>
-
       <div className="chat__footer">
-        <IconButton>
-          <InsertEmoticon />
-        </IconButton>
-        <form>
+        <InsertEmoticonIcon />
+        <form onSubmit={sendMessage}>
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            type="text"
             placeholder="Type a message"
+            type="text"
           />
           <button onClick={sendMessage} type="submit">
-            Send Message
+            Send a message
           </button>
         </form>
-        <IconButton>
-          <Mic />
-        </IconButton>
+        <MicIcon />
       </div>
     </div>
   );
